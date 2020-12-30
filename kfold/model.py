@@ -18,26 +18,24 @@ torch.cuda.empty_cache()
 
 if __name__ == "__main__":
 
-
-    #path to load the labels and images
+    # path to load the labels and images
     csv_file = '../All_Data.csv'
     root_dir = r'C:\StFX\Project\All_Files_Classified\All_Data'
-    training_batch_size = 2 #4
-    training_num_workers = 2 #4
+    training_batch_size = 2  # 4
+    training_num_workers = 2  # 4
     testing_batch_size = 1
     lr = 1e-4
     wd = 1e-4
     num_epochs = 2
 
     compose = transforms.Compose([
-      transforms.ToTensor()
+        transforms.ToTensor()
     ])
 
-    #dataset
+    # dataset
     labels_df = pd.read_csv(csv_file)
     whole_labels_df_AD = labels_df[labels_df.label == "AD"]
     whole_labels_df_CN = labels_df[labels_df.label == "CN"]
-
 
     whole_labels_df_AD = whole_labels_df_AD.sample(frac=1, random_state=5)
     whole_labels_df_AD = whole_labels_df_AD.reset_index(drop=True)
@@ -45,28 +43,28 @@ if __name__ == "__main__":
     whole_labels_df_CN = whole_labels_df_CN.sample(frac=1, random_state=5)
     whole_labels_df_CN = whole_labels_df_CN.reset_index(drop=True)
 
-    #Test dataset
-    labels_df_AD = whole_labels_df_AD.iloc[42:47, :] #420:471
+    # Test dataset
+    labels_df_AD = whole_labels_df_AD.iloc[42:47, :]  # 420:471
     labels_df_CN = whole_labels_df_CN.iloc[42:47, :]
     labels_df = labels_df_AD.append(labels_df_CN, ignore_index=True)
     test_labels_df = labels_df.sample(frac=1, random_state=3)
     test_ds = test_labels_df.reset_index(drop=True)
     test_dataset = ADNIDataloaderAllData(df=test_ds,
-                                      root_dir=root_dir,
-                                      transform=compose)
+                                         root_dir=root_dir,
+                                         transform=compose)
     test_loader = DataLoader(dataset=test_dataset, batch_size=testing_batch_size, shuffle=False, num_workers=0)
 
     print("len of test dataset")
     print(len(test_ds))
 
     kf = KFold(n_splits=5, shuffle=True, random_state=45)
-    labels_df_AD = whole_labels_df_AD.iloc[0:42, :]  #0:320
+    labels_df_AD = whole_labels_df_AD.iloc[0:42, :]  # 0:320
     labels_df_CN = whole_labels_df_CN.iloc[0:42, :]
 
     kf_labels = labels_df_AD.append(labels_df_CN, ignore_index=True)
 
     for i, (train_index, test_index) in enumerate(kf.split(kf_labels)):
-        print("K-Fold Number == ",i)
+        print("K-Fold Number == ", i)
 
         train_dataset = ADNIDataloaderAllData(df=kf_labels.loc[train_index],
                                               root_dir=root_dir,
@@ -81,10 +79,10 @@ if __name__ == "__main__":
         print("len of validation dataset")
         print(len(test_index))
 
+        train_loader = DataLoader(dataset=train_dataset, batch_size=training_batch_size, shuffle=True,
+                                  num_workers=training_num_workers)
+        val_loader = DataLoader(dataset=val_dataset, batch_size=testing_batch_size, shuffle=False, num_workers=0)
 
-
-        train_loader = DataLoader(dataset=train_dataset, batch_size=training_batch_size, shuffle=True, num_workers=training_num_workers)
-        val_loader = DataLoader(dataset=val_dataset, batch_size=training_batch_size, shuffle=False, num_workers=0)
 
         class ADNI_MODEL(nn.Module):
             def __init__(self):
@@ -125,21 +123,22 @@ if __name__ == "__main__":
                 x = self.sigmoid(x)
                 return x
 
+
         # checking for device
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         model = ADNI_MODEL().to(device)
         print("model defined")
 
-        #Optmizer and loss function
-        optimizer=Adam(model.parameters(),lr=lr,weight_decay=wd)
+        # Optmizer and loss function
+        optimizer = Adam(model.parameters(), lr=lr, weight_decay=wd)
 
         train_count = len(train_index)
         val_count = len(test_index)
         test_count = len(test_ds)
 
         for epoch in range(num_epochs):
-            #training on training dataset
+            # training on training dataset
             model.train()
             train_accuracy = 0.0
             train_loss = 0.0
@@ -168,10 +167,10 @@ if __name__ == "__main__":
             train_accuracy = train_accuracy / train_count
             train_loss = train_loss / train_count
 
-            #To save the model after each epoch
-            #torch.save(model.state_dict(), 'best_checkpoint_' + str(epoch) + '.model')
+            # To save the model after each epoch
+            # torch.save(model.state_dict(), 'best_checkpoint_' + str(epoch) + '.model')
 
-            #Evaluation on testing dataset
+            # Evaluation on testing dataset
             model.eval()
 
             val_accuracy = 0.0
@@ -197,15 +196,16 @@ if __name__ == "__main__":
             val_accuracy = val_accuracy / val_count
             val_loss = val_loss / val_count
 
-            print('Epoch: ' + str(epoch) + ' Train Loss: ' + str(train_loss) +' Val Loss: ' + str(val_loss) + ' Train Accuracy: ' + str(
+            print('Epoch: ' + str(epoch) + ' Train Loss: ' + str(train_loss) + ' Val Loss: ' + str(
+                val_loss) + ' Train Accuracy: ' + str(
                 train_accuracy) + ' Val Accuracy: ' + str(val_accuracy))
 
         print("model saved start")
 
-        #model testing
+        # model testing
         model.eval()
-        actual_label=[]
-        predicted_label=[]
+        actual_label = []
+        predicted_label = []
 
         test_accuracy = 0.0
         with torch.no_grad():
@@ -245,4 +245,3 @@ if __name__ == "__main__":
         # Save the best model
         torch.save(model.state_dict(), 'best_checkpoint.model')
         print("model saved")
-

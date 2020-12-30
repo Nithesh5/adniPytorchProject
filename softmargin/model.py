@@ -1,5 +1,5 @@
 from torch.utils.data import DataLoader
-from softmargin.data_loader_sigmoid_1nodes import ADNIDataloaderAllData
+from softmargin.data_loader import ADNIDataloaderAllData
 import pandas as pd
 from torchvision import transforms
 import torch.nn as nn
@@ -8,17 +8,26 @@ from torch.optim import Adam
 
 torch.cuda.empty_cache()
 
-
 if __name__ == "__main__":
 
+    # path to load the labels and images
     csv_file = '../All_Data.csv'
     root_dir = r'C:\StFX\Project\All_Files_Classified\All_Data'
+    training_batch_size = 2  # 4
+    training_num_workers = 2  # 4
+    testing_batch_size = 1
+    lr = 1e-4
+    wd = 1e-4
+    num_epochs = 2
 
-    #Train dataset
+    compose = transforms.Compose([
+        transforms.ToTensor()
+    ])
+
+    # Train dataset
     labels_df = pd.read_csv(csv_file)
     whole_labels_df_AD = labels_df[labels_df.label == "AD"]
     whole_labels_df_CN = labels_df[labels_df.label == "CN"]
-
 
     whole_labels_df_AD = whole_labels_df_AD.sample(frac=1, random_state=5)
     whole_labels_df_AD = whole_labels_df_AD.reset_index(drop=True)
@@ -26,22 +35,22 @@ if __name__ == "__main__":
     whole_labels_df_CN = whole_labels_df_CN.sample(frac=1, random_state=5)
     whole_labels_df_CN = whole_labels_df_CN.reset_index(drop=True)
 
-    labels_df_AD = whole_labels_df_AD.iloc[0:320, :]  #0:320
+    labels_df_AD = whole_labels_df_AD.iloc[0:320, :]  # 0:320
     labels_df_CN = whole_labels_df_CN.iloc[0:320, :]
 
     labels_df = labels_df_AD.append(labels_df_CN, ignore_index=True)
     train_labels_df = labels_df.sample(frac=1, random_state=3)
     train_ds = train_labels_df.reset_index(drop=True)
 
-    #Validation dataset
-    labels_df_AD = whole_labels_df_AD.iloc[320:420, :] #320:420
+    # Validation dataset
+    labels_df_AD = whole_labels_df_AD.iloc[320:420, :]  # 320:420
     labels_df_CN = whole_labels_df_CN.iloc[320:420, :]
     labels_df = labels_df_AD.append(labels_df_CN, ignore_index=True)
     val_labels_df = labels_df.sample(frac=1, random_state=3)
     val_ds = val_labels_df.reset_index(drop=True)
 
     # Test dataset
-    labels_df_AD = whole_labels_df_AD.iloc[420:471, :] #420:471
+    labels_df_AD = whole_labels_df_AD.iloc[420:471, :]  # 420:471
     labels_df_CN = whole_labels_df_CN.iloc[420:471, :]
     labels_df = labels_df_AD.append(labels_df_CN, ignore_index=True)
     test_labels_df = labels_df.sample(frac=1, random_state=3)
@@ -50,27 +59,22 @@ if __name__ == "__main__":
     print("len of train and val and test")
     print(len(train_ds), len(val_ds), len(test_ds))
 
-
-    compose = transforms.Compose([
-      transforms.ToTensor(),
-    ])
-
     train_dataset = ADNIDataloaderAllData(df=train_ds,
-                                        root_dir=root_dir,
-                                        transform=compose)
+                                          root_dir=root_dir,
+                                          transform=compose)
     val_dataset = ADNIDataloaderAllData(df=val_ds,
                                         root_dir=root_dir,
                                         transform=compose)
 
     test_dataset = ADNIDataloaderAllData(df=test_ds,
-                                      root_dir=root_dir,
-                                      transform=compose)
-    batch_size = 1
-    train_batch_size = 4
+                                         root_dir=root_dir,
+                                         transform=compose)
 
-    train_loader = DataLoader(dataset=train_dataset, batch_size=train_batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=training_batch_size, shuffle=True,
+                              num_workers=training_num_workers)
+    val_loader = DataLoader(dataset=val_dataset, batch_size=testing_batch_size, shuffle=False, num_workers=0)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=testing_batch_size, shuffle=False, num_workers=0)
+
 
     class ADNI_MODEL(nn.Module):
         def __init__(self):
@@ -94,7 +98,7 @@ if __name__ == "__main__":
             self.dense_2 = nn.Linear(128, 1)
             self.sigmoid = nn.Sigmoid()
             self.tanh = nn.Tanh()
-            self.softmax = nn.Softmax(dim=1) # bz applying cross entropy , it has inbuilt softmargin
+            self.softmax = nn.Softmax(dim=1)  # bz applying cross entropy , it has inbuilt softmargin
 
         def forward(self, x):
             x = self.relu(self.Conv_1_bn(self.Conv_1(x)))
@@ -119,20 +123,17 @@ if __name__ == "__main__":
     model = ADNI_MODEL().to(device)
     print("model defined")
 
-    #Optmizer and loss function
-    lr = 1e-4
-    wd = 1e-4
-
-    optimizer=Adam(model.parameters(),lr=lr,weight_decay=wd)
+    # Optmizer and loss function
+    optimizer = Adam(model.parameters(), lr=lr, weight_decay=wd)
     criterion = nn.SoftMarginLoss()
-    num_epochs=800
+
     train_count = len(train_ds)
     val_count = len(val_ds)
     test_count = len(test_ds)
     best_accuracy = 0.0
 
     for epoch in range(num_epochs):
-        #training on training dataset
+        # training on training dataset
         model.train()
         train_accuracy = 0.0
         train_loss = 0.0
@@ -168,9 +169,9 @@ if __name__ == "__main__":
         train_accuracy = train_accuracy / train_count
         train_loss = train_loss / train_count
 
-        #torch.save(model.state_dict(), 'best_checkpoint_' + str(epoch) + '.model')
+        # torch.save(model.state_dict(), 'best_checkpoint_' + str(epoch) + '.model')
 
-        #Evaluation on testing dataset
+        # Evaluation on testing dataset
         model.eval()
 
         val_accuracy = 0.0
@@ -203,15 +204,16 @@ if __name__ == "__main__":
         val_accuracy = val_accuracy / val_count
         val_loss = val_loss / val_count
 
-        print('Epoch: ' + str(epoch) + ' Train Loss: ' + str(train_loss) +' Val Loss: ' + str(val_loss) + ' Train Accuracy: ' + str(
+        print('Epoch: ' + str(epoch) + ' Train Loss: ' + str(train_loss) + ' Val Loss: ' + str(
+            val_loss) + ' Train Accuracy: ' + str(
             train_accuracy) + ' Val Accuracy: ' + str(val_accuracy))
 
     print("model saved start")
 
-    #model testing
+    # model testing
     model.eval()
-    x=[]
-    y=[]
+    x = []
+    y = []
 
     test_accuracy = 0.0
     with torch.no_grad():
